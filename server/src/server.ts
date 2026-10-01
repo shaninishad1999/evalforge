@@ -6,17 +6,25 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 
 import connectDB from "./config/db.js";
+import authRoutes from "./routes/auth.routes.js";
 import errorHandler from "./middleware/errorHandler.js";
+
 dotenv.config();
 
 const app = express();
 
 const PORT = process.env.PORT || 5000;
 
+// ============================================
 // Security
+// ============================================
+
 app.use(helmet());
 
+// ============================================
 // CORS
+// ============================================
+
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -24,17 +32,29 @@ app.use(
   })
 );
 
-// Body parsers
+// ============================================
+// Body Parsers
+// ============================================
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ============================================
 // Cookies
+// ============================================
+
 app.use(cookieParser());
 
+// ============================================
 // Logger
+// ============================================
+
 app.use(morgan("dev"));
 
+// ============================================
 // Health Check
+// ============================================
+
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
     success: true,
@@ -42,7 +62,23 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// ============================================
+// API Routes
+// ============================================
+
+app.use("/api/auth", authRoutes);
+
+// ============================================
+// Global Error Handler
+// IMPORTANT: Must be after all routes
+// ============================================
+
+app.use(errorHandler);
+
+// ============================================
 // Start Server
+// ============================================
+
 const startServer = async () => {
   try {
     // Connect MongoDB first

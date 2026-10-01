@@ -13,6 +13,16 @@ export const registerSchema = z.object({
     .email("Please enter a valid email address")
     .transform((email) => email.toLowerCase()),
 
+  phoneNumber: z
+    .string()
+    .trim()
+    .regex(
+      /^\+?[1-9]\d{9,14}$/,
+      "Please enter a valid phone number"
+    )
+    .optional()
+    .or(z.literal("")),
+
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
@@ -42,4 +52,5 @@ export const loginSchema = z.object({
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;

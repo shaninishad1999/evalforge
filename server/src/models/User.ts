@@ -12,6 +12,9 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+    phoneNumber?: string;
+  phoneVerified: boolean;
+
   role: UserRole;
   avatar?: string;
   skills: string[];
@@ -47,7 +50,17 @@ const userSchema = new Schema<IUser>(
       minlength: 8,
       select: false,
     },
+    phoneNumber: {
+  type: String,
+  trim: true,
+  default: "",
+  index: true,
+},
 
+phoneVerified: {
+  type: Boolean,
+  default: false,
+},
     role: {
       type: String,
       enum: [

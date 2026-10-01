@@ -1,8 +1,10 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+
 import AuthSession from "../models/AuthSession.js";
 import User, { UserRole } from "../models/User.js";
 import ApiError from "../utils/ApiError.js";
+
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -11,6 +13,7 @@ import {
 interface RegisterData {
   name: string;
   email: string;
+  phoneNumber?: string;
   password: string;
   role: UserRole;
 }
@@ -20,10 +23,21 @@ interface LoginData {
   password: string;
 }
 
-export const registerUser = async (data: RegisterData) => {
-  const { name, email, password, role } = data;
+// Register User
+export const registerUser = async (
+  data: RegisterData
+) => {
+  const {
+    name,
+    email,
+    phoneNumber,
+    password,
+    role,
+  } = data;
 
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({
+    email,
+  });
 
   if (existingUser) {
     throw new ApiError(
@@ -32,11 +46,15 @@ export const registerUser = async (data: RegisterData) => {
     );
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(
+    password,
+    12
+  );
 
   const user = await User.create({
     name,
     email,
+    phoneNumber: phoneNumber || "",
     password: hashedPassword,
     role,
   });
@@ -45,6 +63,8 @@ export const registerUser = async (data: RegisterData) => {
     id: user._id,
     name: user.name,
     email: user.email,
+    phoneNumber: user.phoneNumber,
+    phoneVerified: user.phoneVerified,
     role: user.role,
     avatar: user.avatar,
     skills: user.skills,
@@ -55,26 +75,41 @@ export const registerUser = async (data: RegisterData) => {
   };
 };
 
-export const loginUser = async (data: LoginData) => {
+// Login User
+export const loginUser = async (
+  data: LoginData
+) => {
   const { email, password } = data;
 
-  const user = await User.findOne({ email }).select("+password");
+  const user = await User.findOne({
+    email,
+  }).select("+password");
 
   if (!user) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(
+      401,
+      "Invalid email or password"
+    );
   }
 
   if (!user.isActive) {
-    throw new ApiError(403, "Your account is inactive");
+    throw new ApiError(
+      403,
+      "Your account is inactive"
+    );
   }
 
-  const isPasswordValid = await bcrypt.compare(
-    password,
-    user.password
-  );
+  const isPasswordValid =
+    await bcrypt.compare(
+      password,
+      user.password
+    );
 
   if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(
+      401,
+      "Invalid email or password"
+    );
   }
 
   const tokenPayload = {
@@ -82,14 +117,24 @@ export const loginUser = async (data: LoginData) => {
     role: user.role,
   };
 
-  const accessToken = generateAccessToken(tokenPayload);
-  const refreshToken = generateRefreshToken(tokenPayload);
-await createAuthSession(user._id.toString(), refreshToken);
+  const accessToken =
+    generateAccessToken(tokenPayload);
+
+  const refreshToken =
+    generateRefreshToken(tokenPayload);
+
+  await createAuthSession(
+    user._id.toString(),
+    refreshToken
+  );
+
   return {
     user: {
       id: user._id,
       name: user.name,
       email: user.email,
+      phoneNumber: user.phoneNumber,
+      phoneVerified: user.phoneVerified,
       role: user.role,
       avatar: user.avatar,
       skills: user.skills,
@@ -102,6 +147,7 @@ await createAuthSession(user._id.toString(), refreshToken);
   };
 };
 
+// Create Auth Session
 export const createAuthSession = async (
   userId: string,
   refreshToken: string
@@ -112,7 +158,8 @@ export const createAuthSession = async (
     .digest("hex");
 
   const expiresAt = new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000
+    Date.now() +
+      7 * 24 * 60 * 60 * 1000
   );
 
   await AuthSession.create({
@@ -122,6 +169,7 @@ export const createAuthSession = async (
   });
 };
 
+// Find Auth Session
 export const findAuthSession = async (
   refreshToken: string
 ) => {
@@ -132,10 +180,13 @@ export const findAuthSession = async (
 
   return AuthSession.findOne({
     refreshTokenHash,
-    expiresAt: { $gt: new Date() },
+    expiresAt: {
+      $gt: new Date(),
+    },
   });
 };
 
+// Delete Auth Session
 export const deleteAuthSession = async (
   refreshToken: string
 ) => {

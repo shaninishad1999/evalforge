@@ -7,6 +7,11 @@ import cookieParser from "cookie-parser";
 
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import clientRoutes from "./routes/client.routes.js";
+import projectManagerRoutes from "./routes/projectManager.routes.js";
+import reviewerRoutes from "./routes/reviewer.routes.js";
+import contributorRoutes from "./routes/contributor.routes.js";
 import errorHandler from "./middleware/errorHandler.js";
 
 dotenv.config();
@@ -67,7 +72,11 @@ app.get("/api/health", (_req, res) => {
 // ============================================
 
 app.use("/api/auth", authRoutes);
-
+app.use("/api/admin", adminRoutes);
+app.use("/api/client", clientRoutes);
+app.use("/api/project-manager",projectManagerRoutes);
+app.use("/api/reviewer", reviewerRoutes);
+app.use("/api/contributor", contributorRoutes);
 // ============================================
 // Global Error Handler
 // IMPORTANT: Must be after all routes

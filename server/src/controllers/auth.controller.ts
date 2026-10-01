@@ -15,10 +15,14 @@ import {
   registerUser,
   loginUser,
   findAuthSession,
+  createAuthSession,
   deleteAuthSession,
 } from "../services/auth.service.js";
 
-import { generateAccessToken } from "../utils/jwt.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../utils/jwt.js";
 
 // Register
 export const register = async (
@@ -98,7 +102,7 @@ export const getMe = async (
   });
 };
 
-// Refresh Access Token
+// Refresh Access Token + Refresh Token Rotation
 export const refreshAccessToken = async (
   req: Request,
   res: Response
@@ -160,19 +164,42 @@ export const refreshAccessToken = async (
     );
   }
 
-  const newAccessToken =
-    generateAccessToken({
-      userId: user._id.toString(),
-      role: user.role,
-    });
+  // Delete old refresh session
+  await deleteAuthSession(refreshToken);
 
-  res.status(200).json({
-    success: true,
-    message: "Access token refreshed successfully",
-    data: {
-      accessToken: newAccessToken,
-    },
+  // Generate new tokens
+  const newAccessToken = generateAccessToken({
+    userId: user._id.toString(),
+    role: user.role,
   });
+
+  const newRefreshToken = generateRefreshToken({
+    userId: user._id.toString(),
+    role: user.role,
+  });
+
+  // Store new refresh session
+  await createAuthSession(
+    user._id.toString(),
+    newRefreshToken
+  );
+
+  // Send new refresh token as HTTP-only cookie
+  res
+    .cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    })
+    .status(200)
+    .json({
+      success: true,
+      message: "Access token refreshed successfully",
+      data: {
+        accessToken: newAccessToken,
+      },
+    });
 };
 
 // Logout

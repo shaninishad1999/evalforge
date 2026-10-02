@@ -13,7 +13,7 @@ import projectManagerRoutes from "./routes/projectManager.routes.js";
 import reviewerRoutes from "./routes/reviewer.routes.js";
 import contributorRoutes from "./routes/contributor.routes.js";
 import errorHandler from "./middleware/errorHandler.js";
-
+import userRoutes from "./routes/user.routes.js";
 dotenv.config();
 
 const app = express();
@@ -77,6 +77,7 @@ app.use("/api/client", clientRoutes);
 app.use("/api/project-manager",projectManagerRoutes);
 app.use("/api/reviewer", reviewerRoutes);
 app.use("/api/contributor", contributorRoutes);
+app.use("/api/users", userRoutes);
 // ============================================
 // Global Error Handler
 // IMPORTANT: Must be after all routes

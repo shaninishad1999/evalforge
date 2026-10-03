@@ -22,6 +22,7 @@ import {
   getMyFaceVerification,
   startMyFaceVerification,
   uploadMySelfie,
+  performMyFaceMatch
 } from "../controllers/faceVerification.controller.js";
 
 import {
@@ -134,5 +135,11 @@ router.post(
     uploadMyFaceReference
   )
 );
-
+// Perform face matching
+router.post(
+  "/me/face-verification/match",
+  asyncHandler(
+    performMyFaceMatch
+  )
+);
 export default router;

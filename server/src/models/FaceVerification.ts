@@ -13,6 +13,13 @@ export type LivenessStatus =
   | "PASSED"
   | "FAILED";
 
+export type FaceMatchStatus =
+  | "NOT_STARTED"
+  | "PROCESSING"
+  | "MATCHED"
+  | "NOT_MATCHED"
+  | "FAILED";
+
 export interface IFaceVerification extends Document {
   userId: mongoose.Types.ObjectId;
 
@@ -29,6 +36,26 @@ export interface IFaceVerification extends Document {
   };
 
   livenessScore: number;
+
+  // ============================================================
+  // FACE MATCHING
+  // ============================================================
+
+  matchStatus: FaceMatchStatus;
+
+  matchScore: number;
+
+  matchThreshold: number;
+
+  faceMatchAttempts: number;
+
+  maxFaceMatchAttempts: number;
+
+  matchedAt: Date | null;
+
+  // ============================================================
+  // VERIFICATION ATTEMPTS
+  // ============================================================
 
   attempts: number;
   maxAttempts: number;
@@ -110,6 +137,59 @@ const faceVerificationSchema =
         min: 0,
         max: 100,
       },
+
+      // ============================================================
+      // FACE MATCHING
+      // ============================================================
+
+      matchStatus: {
+        type: String,
+        enum: [
+          "NOT_STARTED",
+          "PROCESSING",
+          "MATCHED",
+          "NOT_MATCHED",
+          "FAILED",
+        ],
+        default: "NOT_STARTED",
+        index: true,
+      },
+
+      matchScore: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100,
+      },
+
+      matchThreshold: {
+        type: Number,
+        default: 60,
+        min: 0,
+        max: 100,
+      },
+
+      faceMatchAttempts: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      maxFaceMatchAttempts: {
+        type: Number,
+        default: 3,
+        min: 1,
+        max: 5,
+      },
+
+      matchedAt: {
+        type: Date,
+        default: null,
+      },
+
+      // ============================================================
+      // VERIFICATION ATTEMPTS
+      // ============================================================
 
       attempts: {
         type: Number,

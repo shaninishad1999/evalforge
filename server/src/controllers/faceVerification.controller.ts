@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import ApiError from "../utils/ApiError.js";
-
+import { performFaceMatch } from "../services/faceMatching.service.js";
 import {
   getFaceVerification,
   startFaceVerification,
@@ -108,6 +108,38 @@ export const uploadMySelfie = async (
 
     data: {
       faceVerification,
+    },
+  });
+};
+
+// ============================================================
+// PERFORM FACE MATCH
+// POST /api/users/me/face-verification/match
+// ============================================================
+
+export const performMyFaceMatch = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  if (!req.user) {
+    throw new ApiError(
+      401,
+      "Authentication required"
+    );
+  }
+
+  const result = await performFaceMatch(
+    req.user.userId
+  );
+
+  res.status(200).json({
+    success: true,
+    message: result.matched
+      ? "Face matched successfully"
+      : "Face does not match the reference image",
+
+    data: {
+      faceVerification: result,
     },
   });
 };

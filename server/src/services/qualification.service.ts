@@ -116,49 +116,180 @@ const isExactAnswerMatch = (
 // Future AI semantic evaluation can be plugged in here.
 // ============================================================
 
+// ============================================================
+// TEXT ANSWER MATCH
+// ============================================================
+//
+// Current implementation:
+//
+// 1. Exact normalized match
+// 2. Keyword coverage
+// 3. Basic token-based semantic similarity
+//
+// Future AI semantic evaluation can be plugged in here.
+//
+// Returns a score ratio between 0 and 1.
+// ============================================================
+
 const evaluateTextAnswer = (
   userAnswer: string,
   referenceAnswer: string | null,
   keywords: string[]
 ): number => {
+  const normalizeText = (
+    text: string
+  ): string => {
+    return text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const getTokens = (
+    text: string
+  ): string[] => {
+    return normalizeText(text)
+      .split(" ")
+      .filter(
+        (word) =>
+          word.length > 2
+      );
+  };
+
   const normalizedUser =
-    userAnswer
-      .trim()
-      .toLowerCase();
+    normalizeText(userAnswer);
 
   if (!normalizedUser) {
     return 0;
   }
 
+  /*
+   * ========================================================
+   * EXACT MATCH
+   * ========================================================
+   */
+
   if (
     referenceAnswer &&
     normalizedUser ===
-      referenceAnswer
-        .trim()
-        .toLowerCase()
+      normalizeText(referenceAnswer)
   ) {
     return 1;
   }
 
-  if (keywords.length === 0) {
-    return 0;
+  /*
+   * ========================================================
+   * REFERENCE ANSWER TOKEN MATCH
+   * ========================================================
+   */
+
+  let referenceScore = 0;
+
+  if (referenceAnswer) {
+    const userTokens =
+      new Set(
+        getTokens(userAnswer)
+      );
+
+    const referenceTokens =
+      getTokens(referenceAnswer);
+
+    if (
+      referenceTokens.length > 0
+    ) {
+      const matchedTokens =
+        referenceTokens.filter(
+          (token) =>
+            userTokens.has(token)
+        );
+
+      referenceScore =
+        matchedTokens.length /
+        referenceTokens.length;
+    }
   }
 
-  const matchedKeywords =
-    keywords.filter((keyword) =>
-      normalizedUser.includes(
-        keyword
-          .trim()
-          .toLowerCase()
+  /*
+   * ========================================================
+   * KEYWORD MATCH
+   * ========================================================
+   */
+
+  let keywordScore = 0;
+
+  const validKeywords =
+    keywords
+      .map((keyword) =>
+        normalizeText(keyword)
+      )
+      .filter(Boolean);
+
+  if (
+    validKeywords.length > 0
+  ) {
+    const matchedKeywords =
+      validKeywords.filter(
+        (keyword) =>
+          normalizedUser.includes(
+            keyword
+          )
+      );
+
+    keywordScore =
+      matchedKeywords.length /
+      validKeywords.length;
+  }
+
+  /*
+   * ========================================================
+   * COMBINED SCORE
+   * ========================================================
+   *
+   * Reference answer gets higher weight because it represents
+   * the expected explanation.
+   *
+   * Keywords provide additional evidence.
+   */
+
+  let finalScore = 0;
+
+  if (
+    referenceAnswer &&
+    validKeywords.length > 0
+  ) {
+    finalScore =
+      referenceScore * 0.7 +
+      keywordScore * 0.3;
+  } else if (
+    referenceAnswer
+  ) {
+    finalScore =
+      referenceScore;
+  } else {
+    finalScore =
+      keywordScore;
+  }
+
+  /*
+   * ========================================================
+   * SCORE NORMALIZATION
+   * ========================================================
+   */
+
+  finalScore =
+    Math.max(
+      0,
+      Math.min(
+        1,
+        finalScore
       )
     );
 
-  return (
-    matchedKeywords.length /
-    keywords.length
-  );
+  return Math.round(
+    finalScore * 100
+  ) / 100;
 };
-
 // ============================================================
 // CREATE QUALIFICATION
 // ============================================================
@@ -313,6 +444,7 @@ export const createQualification =
     return qualification;
   };
 
+  
 // ============================================================
 // GET QUALIFICATION BY ID
 // ============================================================
@@ -366,7 +498,34 @@ export const getQualificationById =
         );
       }
 
-      return qualification;
+      /*
+       * Security:
+       *
+       * Contributors must never receive
+       * correct answers, reference answers,
+       * or evaluation keywords.
+       *
+       * These values are required by the server
+       * for automatic evaluation after submission.
+       */
+      const qualificationData =
+        qualification.toObject();
+
+      qualificationData.questions =
+        qualificationData.questions.map(
+          (question: any) => {
+            const {
+              correctAnswer,
+              referenceAnswer,
+              keywords,
+              ...safeQuestion
+            } = question;
+
+            return safeQuestion;
+          }
+        );
+
+      return qualificationData;
     }
 
     /*
@@ -1808,7 +1967,9 @@ export const submitQualificationAttempt =
 // ============================================================
 // GET ATTEMPT
 // ============================================================
-
+// ============================================================
+// GET ATTEMPT
+// ============================================================
 export const getQualificationAttempt =
   async (
     attemptId: string,
@@ -1832,7 +1993,8 @@ export const getQualificationAttempt =
         }
       )
         .populate(
-          "qualification"
+          "qualification",
+          "title description instructions learningMaterial eligibility assessment scoring questions status"
         )
         .populate(
           "project",
@@ -1849,9 +2011,53 @@ export const getQualificationAttempt =
       );
     }
 
-    return attempt;
-  };
+    /*
+     * ========================================================
+     * SECURITY
+     * ========================================================
+     *
+     * The qualification contains answer keys that are required
+     * by the server for automatic evaluation.
+     *
+     * These fields must NEVER be returned to the contributor.
+     *
+     * Remove:
+     * - correctAnswer
+     * - referenceAnswer
+     * - keywords
+     */
 
+    const attemptData =
+      attempt.toObject();
+
+    if (
+      attemptData.qualification &&
+      typeof attemptData.qualification ===
+        "object"
+    ) {
+      const qualificationData =
+        attemptData.qualification as any;
+
+      qualificationData.questions =
+        qualificationData.questions.map(
+          (question: any) => {
+            const {
+              correctAnswer,
+              referenceAnswer,
+              keywords,
+              ...safeQuestion
+            } = question;
+
+            return safeQuestion;
+          }
+        );
+
+      attemptData.qualification =
+        qualificationData;
+    }
+
+    return attemptData;
+  };
 // ============================================================
 // GET MY ATTEMPTS
 // ============================================================

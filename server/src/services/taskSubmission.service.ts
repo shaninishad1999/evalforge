@@ -1,10 +1,17 @@
 import mongoose from "mongoose";
 
 import TaskSubmission from "../models/TaskSubmission.js";
+
 import Task from "../models/Task.js";
+
 import Project from "../models/Project.js";
+
 import Dataset from "../models/Dataset.js";
+
 import DatasetItem from "../models/DatasetItem.js";
+
+import ProjectAssignment from "../models/ProjectAssignment.js";
+
 import ApiError from "../utils/ApiError.js";
 
 import {
@@ -20,8 +27,12 @@ import {
 const validateObjectId = (
   id: string,
   fieldName: string
-) => {
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+): void => {
+  if (
+    !mongoose.Types.ObjectId.isValid(
+      id
+    )
+  ) {
     throw new ApiError(
       400,
       `Invalid ${fieldName}`
@@ -30,299 +41,552 @@ const validateObjectId = (
 };
 
 // ============================================================
-// CREATE TASK SUBMISSION
+// CHECK CONTRIBUTOR PROJECT ASSIGNMENT
 // ============================================================
 
-export const createTaskSubmission = async (
-  contributorId: string,
-  input: unknown
-) => {
-  validateObjectId(
-    contributorId,
-    "contributor ID"
-  );
+const getContributorAssignment =
+  async (
+    projectId: mongoose.Types.ObjectId,
+    contributorId: string
+  ) => {
+    return ProjectAssignment.findOne({
+      project: projectId,
 
-  const data =
-    createTaskSubmissionSchema.parse(
-      input
-    );
-
-  validateObjectId(
-    data.task,
-    "task ID"
-  );
-
-  validateObjectId(
-    data.project,
-    "project ID"
-  );
-
-  validateObjectId(
-    data.dataset,
-    "dataset ID"
-  );
-
-  validateObjectId(
-    data.datasetItem,
-    "dataset item ID"
-  );
-
-  // ==========================================================
-  // FIND TASK
-  // ==========================================================
-
-  const task =
-    await Task.findById(data.task);
-
-  if (!task) {
-    throw new ApiError(
-      404,
-      "Task not found"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY TASK PROJECT
-  // ==========================================================
-
-  if (
-    task.project.toString() !==
-    data.project
-  ) {
-    throw new ApiError(
-      400,
-      "Task does not belong to this project"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY TASK DATASET
-  // ==========================================================
-
-  if (
-    task.dataset.toString() !==
-    data.dataset
-  ) {
-    throw new ApiError(
-      400,
-      "Task does not belong to this dataset"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY TASK DATASET ITEM
-  // ==========================================================
-
-  if (
-    task.datasetItem.toString() !==
-    data.datasetItem
-  ) {
-    throw new ApiError(
-      400,
-      "Task does not belong to this dataset item"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY CONTRIBUTOR OWNS TASK
-  // ==========================================================
-
-  if (
-    task.claimedBy?.toString() !==
-    contributorId
-  ) {
-    throw new ApiError(
-      403,
-      "This task is not assigned to you"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY TASK STATUS
-  // ==========================================================
-
-  if (
-    task.status !== "IN_PROGRESS" &&
-    task.status !== "REVISION"
-  ) {
-    throw new ApiError(
-      400,
-      "This task is not ready for submission"
-    );
-  }
-
-  // ==========================================================
-  // FIND PROJECT
-  // ==========================================================
-
-  const project =
-    await Project.findById(
-      data.project
-    );
-
-  if (!project) {
-    throw new ApiError(
-      404,
-      "Project not found"
-    );
-  }
-
-  // ==========================================================
-  // FIND DATASET
-  // ==========================================================
-
-  const dataset =
-    await Dataset.findById(
-      data.dataset
-    );
-
-  if (!dataset) {
-    throw new ApiError(
-      404,
-      "Dataset not found"
-    );
-  }
-
-  // ==========================================================
-  // FIND DATASET ITEM
-  // ==========================================================
-
-  const datasetItem =
-    await DatasetItem.findById(
-      data.datasetItem
-    );
-
-  if (!datasetItem) {
-    throw new ApiError(
-      404,
-      "Dataset item not found"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY ATTEMPT NUMBER
-  // ==========================================================
-
-  if (
-    data.attemptNumber >
-    task.configuration.maxAttempts
-  ) {
-    throw new ApiError(
-      400,
-      `Maximum ${task.configuration.maxAttempts} attempts are allowed for this task`
-    );
-  }
-
-  // ==========================================================
-  // CHECK EXISTING ATTEMPT
-  // ==========================================================
-
-  const existingSubmission =
-    await TaskSubmission.findOne({
-      task: task._id,
       contributor: contributorId,
-      attemptNumber:
-        data.attemptNumber,
-    });
 
-  if (existingSubmission) {
-    throw new ApiError(
-      409,
-      "This attempt already exists"
-    );
-  }
-
-  // ==========================================================
-  // CREATE SUBMISSION
-  // ==========================================================
-
-  const submission =
-    await TaskSubmission.create({
-      task: task._id,
-
-      project: project._id,
-
-      dataset: dataset._id,
-
-      datasetItem: datasetItem._id,
-
-      contributor:
-        new mongoose.Types.ObjectId(
-          contributorId
-        ),
-
-      attemptNumber:
-        data.attemptNumber,
-
-      response: {
-        answer:
-          data.response.answer ?? "",
-
-        selectedLabel:
-          data.response.selectedLabel ??
-          "",
-
-        ranking:
-          data.response.ranking ?? [],
-
-        rewrittenText:
-          data.response.rewrittenText ??
-          "",
-
-        transcription:
-          data.response.transcription ??
-          "",
-
-        code:
-          data.response.code ?? "",
-
-        boundingBoxes:
-          data.response.boundingBoxes ??
-          [],
-
-        evaluation: {
-          score:
-            data.response.evaluation
-              ?.score ?? null,
-
-          criteria:
-            data.response.evaluation
-              ?.criteria ?? [],
-        },
+      status: {
+        $in: [
+          "PENDING",
+          "ACTIVE",
+          "PAUSED",
+        ],
       },
-
-      feedback:
-        data.feedback ?? "",
-
-      status:
-        data.status ?? "DRAFT",
-
-      submittedAt:
-        data.status === "SUBMITTED"
-          ? new Date()
-          : null,
-
-      reviewedAt: null,
-
-      revisionRequestedAt: null,
     });
+  };
 
-  return submission;
+// ============================================================
+// CHECK CONTRIBUTOR TASK OWNERSHIP
+// ============================================================
+
+const ensureTaskBelongsToContributor =
+  (
+    task: {
+      claimedBy:
+        | mongoose.Types.ObjectId
+        | null;
+    },
+    contributorId: string
+  ) => {
+    if (
+      !task.claimedBy ||
+      task.claimedBy.toString() !==
+        contributorId
+    ) {
+      throw new ApiError(
+        403,
+        "This task is not assigned to you"
+      );
+    }
+  };
+
+// ============================================================
+// NORMALIZE RESPONSE
+// ============================================================
+//
+// IMPORTANT:
+//
+// ranking MUST be string[].
+//
+// This matches TaskSubmission model and validation.
+//
+// ============================================================
+
+const normalizeResponse = (
+  response: {
+    answer?: string;
+
+    selectedLabel?: string;
+
+    ranking?: string[];
+
+    rewrittenText?: string;
+
+    transcription?: string;
+
+    code?: string;
+
+    boundingBoxes?: Array<{
+      label: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+
+    evaluation?: {
+      score?: number | null;
+
+      criteria?: Array<{
+        criterion: string;
+        score: number;
+        feedback?: string;
+      }>;
+    };
+  },
+
+  existingResponse?: {
+    answer: string;
+
+    selectedLabel: string;
+
+    ranking: string[];
+
+    rewrittenText: string;
+
+    transcription: string;
+
+    code: string;
+
+    boundingBoxes: Array<{
+      label: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+
+    evaluation: {
+      score: number | null;
+
+      criteria: Array<{
+        criterion: string;
+        score: number;
+        feedback: string;
+      }>;
+    };
+  }
+) => {
+  return {
+    answer:
+      response.answer ??
+      existingResponse?.answer ??
+      "",
+
+    selectedLabel:
+      response.selectedLabel ??
+      existingResponse?.selectedLabel ??
+      "",
+
+    ranking:
+      response.ranking ??
+      existingResponse?.ranking ??
+      [],
+
+    rewrittenText:
+      response.rewrittenText ??
+      existingResponse?.rewrittenText ??
+      "",
+
+    transcription:
+      response.transcription ??
+      existingResponse?.transcription ??
+      "",
+
+    code:
+      response.code ??
+      existingResponse?.code ??
+      "",
+
+    boundingBoxes:
+      response.boundingBoxes ??
+      existingResponse?.boundingBoxes ??
+      [],
+
+    evaluation: {
+      score:
+        response.evaluation?.score ??
+        existingResponse?.evaluation?.score ??
+        null,
+
+      criteria:
+        response.evaluation?.criteria
+          ? response.evaluation.criteria.map(
+              (criterion) => ({
+                criterion:
+                  criterion.criterion,
+
+                score:
+                  criterion.score,
+
+                feedback:
+                  criterion.feedback ??
+                  "",
+              })
+            )
+          : existingResponse
+              ?.evaluation?.criteria ??
+            [],
+    },
+  };
 };
 
 // ============================================================
-// GET SUBMISSION BY ID
+// CREATE TASK SUBMISSION
+// ============================================================
+
+export const createTaskSubmission =
+  async (
+    contributorId: string,
+    input: unknown
+  ) => {
+    validateObjectId(
+      contributorId,
+      "contributor ID"
+    );
+
+    const data =
+      createTaskSubmissionSchema.parse(
+        input
+      );
+
+    validateObjectId(
+      data.task,
+      "task ID"
+    );
+
+    validateObjectId(
+      data.project,
+      "project ID"
+    );
+
+    validateObjectId(
+      data.dataset,
+      "dataset ID"
+    );
+
+    validateObjectId(
+      data.datasetItem,
+      "dataset item ID"
+    );
+
+    // ========================================================
+    // FIND TASK
+    // ========================================================
+
+    const task =
+      await Task.findById(
+        data.task
+      );
+
+    if (!task) {
+      throw new ApiError(
+        404,
+        "Task not found"
+      );
+    }
+
+    // ========================================================
+    // VERIFY TASK / PROJECT
+    // ========================================================
+
+    if (
+      task.project.toString() !==
+      data.project
+    ) {
+      throw new ApiError(
+        400,
+        "Task does not belong to the provided project"
+      );
+    }
+
+    // ========================================================
+    // VERIFY TASK / DATASET
+    // ========================================================
+
+    if (
+      task.dataset.toString() !==
+      data.dataset
+    ) {
+      throw new ApiError(
+        400,
+        "Task does not belong to the provided dataset"
+      );
+    }
+
+    // ========================================================
+    // VERIFY TASK / DATASET ITEM
+    // ========================================================
+
+    if (
+      task.datasetItem.toString() !==
+      data.datasetItem
+    ) {
+      throw new ApiError(
+        400,
+        "Task does not belong to the provided dataset item"
+      );
+    }
+
+    // ========================================================
+    // VERIFY TASK CLAIM
+    // ========================================================
+
+    ensureTaskBelongsToContributor(
+      task,
+      contributorId
+    );
+
+    // ========================================================
+    // VERIFY PROJECT ASSIGNMENT
+    // ========================================================
+
+    const assignment =
+      await getContributorAssignment(
+        task.project,
+        contributorId
+      );
+
+    if (!assignment) {
+      throw new ApiError(
+        403,
+        "You are not assigned to this project"
+      );
+    }
+
+    // ========================================================
+    // VERIFY TASK STATUS
+    // ========================================================
+
+    if (
+      task.status !==
+        "IN_PROGRESS" &&
+      task.status !==
+        "REVISION"
+    ) {
+      throw new ApiError(
+        400,
+        "Task is not available for submission"
+      );
+    }
+
+    // ========================================================
+    // CHECK MAX ATTEMPTS
+    // ========================================================
+
+    const maxAttempts =
+      task.configuration
+        ?.maxAttempts ?? 3;
+
+    const existingSubmissionCount =
+      await TaskSubmission.countDocuments({
+        task:
+          task._id,
+
+        contributor:
+          contributorId,
+      });
+
+    if (
+      existingSubmissionCount >=
+      maxAttempts
+    ) {
+      throw new ApiError(
+        400,
+        "Maximum submission attempts reached for this task"
+      );
+    }
+
+    const attemptNumber =
+      data.attemptNumber ??
+      existingSubmissionCount + 1;
+
+    if (
+      attemptNumber >
+      maxAttempts
+    ) {
+      throw new ApiError(
+        400,
+        "Attempt number exceeds the maximum allowed attempts"
+      );
+    }
+
+    if (
+      attemptNumber < 1
+    ) {
+      throw new ApiError(
+        400,
+        "Attempt number must be at least 1"
+      );
+    }
+
+    // ========================================================
+    // PREVENT DUPLICATE ATTEMPT NUMBER
+    // ========================================================
+
+    const existingAttempt =
+      await TaskSubmission.findOne({
+        task:
+          task._id,
+
+        contributor:
+          contributorId,
+
+        attemptNumber,
+      });
+
+    if (existingAttempt) {
+      throw new ApiError(
+        409,
+        "This submission attempt already exists"
+      );
+    }
+
+    // ========================================================
+    // VERIFY PROJECT
+    // ========================================================
+
+    const project =
+      await Project.findById(
+        data.project
+      );
+
+    if (!project) {
+      throw new ApiError(
+        404,
+        "Project not found"
+      );
+    }
+
+    // ========================================================
+    // VERIFY DATASET
+    // ========================================================
+
+    const dataset =
+      await Dataset.findById(
+        data.dataset
+      );
+
+    if (!dataset) {
+      throw new ApiError(
+        404,
+        "Dataset not found"
+      );
+    }
+
+    if (
+      dataset.project.toString() !==
+      project._id.toString()
+    ) {
+      throw new ApiError(
+        400,
+        "Dataset does not belong to this project"
+      );
+    }
+
+    // ========================================================
+    // VERIFY DATASET ITEM
+    // ========================================================
+
+    const datasetItem =
+      await DatasetItem.findById(
+        data.datasetItem
+      );
+
+    if (!datasetItem) {
+      throw new ApiError(
+        404,
+        "Dataset item not found"
+      );
+    }
+
+    if (
+      datasetItem.dataset.toString() !==
+      dataset._id.toString()
+    ) {
+      throw new ApiError(
+        400,
+        "Dataset item does not belong to this dataset"
+      );
+    }
+
+    if (
+      datasetItem.project.toString() !==
+      project._id.toString()
+    ) {
+      throw new ApiError(
+        400,
+        "Dataset item does not belong to this project"
+      );
+    }
+
+    // ========================================================
+    // CREATE DRAFT
+    // ========================================================
+
+    const submission =
+      await TaskSubmission.create({
+        task:
+          task._id,
+
+        project:
+          project._id,
+
+        dataset:
+          dataset._id,
+
+        datasetItem:
+          datasetItem._id,
+
+        contributor:
+          new mongoose.Types.ObjectId(
+            contributorId
+          ),
+
+        attemptNumber,
+
+        response:
+          normalizeResponse(
+            data.response
+          ),
+
+        feedback:
+          data.feedback ??
+          "",
+
+        status:
+          "DRAFT",
+
+        submittedAt:
+          null,
+
+        reviewedAt:
+          null,
+
+        revisionRequestedAt:
+          null,
+      });
+
+    return submission;
+  };
+
+// ============================================================
+// GET TASK SUBMISSION BY ID
 // ============================================================
 
 export const getTaskSubmissionById =
   async (
     submissionId: string,
-    userId?: string,
-    userRole?: string
+    userId: string,
+    userRole: string
   ) => {
     validateObjectId(
       submissionId,
-      "task submission ID"
+      "submission ID"
+    );
+
+    validateObjectId(
+      userId,
+      "user ID"
     );
 
     const submission =
@@ -331,15 +595,15 @@ export const getTaskSubmissionById =
       )
         .populate(
           "task",
-          "title type instructions prompt evaluationCriteria configuration reward status claimedBy"
+          "title type status claimedBy reward configuration"
         )
         .populate(
           "project",
-          "title description client projectManager status"
+          "title client projectManager status"
         )
         .populate(
           "dataset",
-          "name description type status"
+          "name type status"
         )
         .populate(
           "datasetItem",
@@ -362,8 +626,10 @@ export const getTaskSubmissionById =
     // ========================================================
 
     if (
-      userRole === "SUPER_ADMIN" ||
-      userRole === "ADMIN"
+      userRole ===
+        "SUPER_ADMIN" ||
+      userRole ===
+        "ADMIN"
     ) {
       return submission;
     }
@@ -373,10 +639,19 @@ export const getTaskSubmissionById =
     // ========================================================
 
     if (
-      userRole === "CONTRIBUTOR" &&
-      submission.contributor
-        .toString() === userId
+      userRole ===
+      "CONTRIBUTOR"
     ) {
+      if (
+        submission.contributor._id.toString() !==
+        userId
+      ) {
+        throw new ApiError(
+          403,
+          "You do not have access to this submission"
+        );
+      }
+
       return submission;
     }
 
@@ -385,47 +660,71 @@ export const getTaskSubmissionById =
     // ========================================================
 
     if (
-      userRole === "REVIEWER"
+      userRole ===
+      "REVIEWER"
     ) {
       return submission;
     }
 
     // ========================================================
-    // CLIENT / PROJECT MANAGER
+    // CLIENT
     // ========================================================
 
-    const project =
-      submission.project as unknown as {
-        client?:
-          | mongoose.Types.ObjectId;
-        projectManager?:
-          | mongoose.Types.ObjectId
-          | null;
-      };
-
-    if (userId && userRole) {
-      const isClient =
-        userRole === "CLIENT" &&
-        project.client?.toString() ===
-          userId;
-
-      const isProjectManager =
-        userRole ===
-          "PROJECT_MANAGER" &&
-        project.projectManager
-          ?.toString() === userId;
+    if (
+      userRole ===
+      "CLIENT"
+    ) {
+      const project =
+        submission.project as unknown as {
+          client:
+            | mongoose.Types.ObjectId
+            | null;
+        };
 
       if (
-        isClient ||
-        isProjectManager
+        project.client?.toString() !==
+        userId
       ) {
-        return submission;
+        throw new ApiError(
+          403,
+          "You do not have access to this submission"
+        );
       }
+
+      return submission;
+    }
+
+    // ========================================================
+    // PROJECT MANAGER
+    // ========================================================
+
+    if (
+      userRole ===
+      "PROJECT_MANAGER"
+    ) {
+      const project =
+        submission.project as unknown as {
+          projectManager:
+            | mongoose.Types.ObjectId
+            | null;
+        };
+
+      if (
+        project.projectManager?.toString() !==
+        userId
+      ) {
+        throw new ApiError(
+          403,
+          "You do not have access to this submission"
+        );
+      }
+
+      return submission;
     }
 
     throw new ApiError(
       403,
-      "You do not have access to this task submission"
+      "You do not have access to this submission"
     );
   };
 
@@ -439,6 +738,7 @@ export const getTaskSubmissions =
     userRole: string,
     filters?: {
       taskId?: string;
+      projectId?: string;
       contributorId?: string;
       status?: string;
     }
@@ -454,10 +754,12 @@ export const getTaskSubmissions =
     > = {};
 
     // ========================================================
-    // TASK FILTER
+    // FILTERS
     // ========================================================
 
-    if (filters?.taskId) {
+    if (
+      filters?.taskId
+    ) {
       validateObjectId(
         filters.taskId,
         "task ID"
@@ -467,11 +769,33 @@ export const getTaskSubmissions =
         filters.taskId;
     }
 
-    // ========================================================
-    // STATUS FILTER
-    // ========================================================
+    if (
+      filters?.projectId
+    ) {
+      validateObjectId(
+        filters.projectId,
+        "project ID"
+      );
 
-    if (filters?.status) {
+      filter.project =
+        filters.projectId;
+    }
+
+    if (
+      filters?.contributorId
+    ) {
+      validateObjectId(
+        filters.contributorId,
+        "contributor ID"
+      );
+
+      filter.contributor =
+        filters.contributorId;
+    }
+
+    if (
+      filters?.status
+    ) {
       filter.status =
         filters.status;
     }
@@ -481,39 +805,49 @@ export const getTaskSubmissions =
     // ========================================================
 
     if (
-      userRole === "SUPER_ADMIN" ||
-      userRole === "ADMIN"
+      userRole ===
+        "SUPER_ADMIN" ||
+      userRole ===
+        "ADMIN"
     ) {
-      if (
-        filters?.contributorId
-      ) {
-        validateObjectId(
-          filters.contributorId,
-          "contributor ID"
-        );
-
-        filter.contributor =
-          filters.contributorId;
-      }
-
       return TaskSubmission.find(
         filter
       )
         .populate(
           "task",
-          "title type status reward"
+          "title type status claimedBy reward"
         )
         .populate(
           "project",
           "title client projectManager status"
         )
         .populate(
-          "dataset",
-          "name type status"
+          "contributor",
+          "name email role"
+        )
+        .sort({
+          createdAt: -1,
+        });
+    }
+
+    // ========================================================
+    // REVIEWER
+    // ========================================================
+
+    if (
+      userRole ===
+      "REVIEWER"
+    ) {
+      return TaskSubmission.find(
+        filter
+      )
+        .populate(
+          "task",
+          "title type status claimedBy reward"
         )
         .populate(
-          "datasetItem",
-          "type content metadata status"
+          "project",
+          "title client projectManager status"
         )
         .populate(
           "contributor",
@@ -529,7 +863,8 @@ export const getTaskSubmissions =
     // ========================================================
 
     if (
-      userRole === "CONTRIBUTOR"
+      userRole ===
+      "CONTRIBUTOR"
     ) {
       filter.contributor =
         userId;
@@ -539,50 +874,11 @@ export const getTaskSubmissions =
       )
         .populate(
           "task",
-          "title type status reward"
+          "title type status claimedBy reward"
         )
         .populate(
           "project",
-          "title description status"
-        )
-        .populate(
-          "dataset",
-          "name type status"
-        )
-        .populate(
-          "datasetItem",
-          "type content metadata status"
-        )
-        .sort({
-          createdAt: -1,
-        });
-    }
-
-    // ========================================================
-    // REVIEWER
-    // ========================================================
-
-    if (
-      userRole === "REVIEWER"
-    ) {
-      return TaskSubmission.find(
-        filter
-      )
-        .populate(
-          "task",
-          "title type status reward"
-        )
-        .populate(
-          "project",
-          "title description status"
-        )
-        .populate(
-          "dataset",
-          "name type status"
-        )
-        .populate(
-          "datasetItem",
-          "type content metadata status"
+          "title client projectManager status"
         )
         .populate(
           "contributor",
@@ -598,20 +894,26 @@ export const getTaskSubmissions =
     // ========================================================
 
     if (
-      userRole === "CLIENT"
+      userRole ===
+      "CLIENT"
     ) {
       const projects =
         await Project.find({
-          client: userId,
-        }).select("_id");
+          client:
+            userId,
+        }).select(
+          "_id"
+        );
 
       const projectIds =
         projects.map(
-          (project) => project._id
+          (project) =>
+            project._id
         );
 
       filter.project = {
-        $in: projectIds,
+        $in:
+          projectIds,
       };
 
       return TaskSubmission.find(
@@ -619,19 +921,11 @@ export const getTaskSubmissions =
       )
         .populate(
           "task",
-          "title type status reward"
+          "title type status claimedBy reward"
         )
         .populate(
           "project",
-          "title description status"
-        )
-        .populate(
-          "dataset",
-          "name type status"
-        )
-        .populate(
-          "datasetItem",
-          "type content metadata status"
+          "title client projectManager status"
         )
         .populate(
           "contributor",
@@ -652,16 +946,21 @@ export const getTaskSubmissions =
     ) {
       const projects =
         await Project.find({
-          projectManager: userId,
-        }).select("_id");
+          projectManager:
+            userId,
+        }).select(
+          "_id"
+        );
 
       const projectIds =
         projects.map(
-          (project) => project._id
+          (project) =>
+            project._id
         );
 
       filter.project = {
-        $in: projectIds,
+        $in:
+          projectIds,
       };
 
       return TaskSubmission.find(
@@ -669,19 +968,11 @@ export const getTaskSubmissions =
       )
         .populate(
           "task",
-          "title type status reward"
+          "title type status claimedBy reward"
         )
         .populate(
           "project",
-          "title description status"
-        )
-        .populate(
-          "dataset",
-          "name type status"
-        )
-        .populate(
-          "datasetItem",
-          "type content metadata status"
+          "title client projectManager status"
         )
         .populate(
           "contributor",
@@ -707,7 +998,7 @@ export const updateTaskSubmission =
   ) => {
     validateObjectId(
       submissionId,
-      "task submission ID"
+      "submission ID"
     );
 
     validateObjectId(
@@ -733,7 +1024,7 @@ export const updateTaskSubmission =
     }
 
     // ========================================================
-    // VERIFY OWNER
+    // OWNER CHECK
     // ========================================================
 
     if (
@@ -743,6 +1034,44 @@ export const updateTaskSubmission =
       throw new ApiError(
         403,
         "You can only update your own submission"
+      );
+    }
+
+    // ========================================================
+    // FIND TASK
+    // ========================================================
+
+    const task =
+      await Task.findById(
+        submission.task
+      );
+
+    if (!task) {
+      throw new ApiError(
+        404,
+        "Task not found"
+      );
+    }
+
+    ensureTaskBelongsToContributor(
+      task,
+      contributorId
+    );
+
+    // ========================================================
+    // ASSIGNMENT CHECK
+    // ========================================================
+
+    const assignment =
+      await getContributorAssignment(
+        task.project,
+        contributorId
+      );
+
+    if (!assignment) {
+      throw new ApiError(
+        403,
+        "You are not assigned to this project"
       );
     }
 
@@ -758,7 +1087,23 @@ export const updateTaskSubmission =
     ) {
       throw new ApiError(
         400,
-        "This submission cannot be edited"
+        "Only draft or revision submissions can be updated"
+      );
+    }
+
+    // ========================================================
+    // TASK STATUS CHECK
+    // ========================================================
+
+    if (
+      task.status !==
+        "IN_PROGRESS" &&
+      task.status !==
+        "REVISION"
+    ) {
+      throw new ApiError(
+        400,
+        "Task is not currently editable"
       );
     }
 
@@ -766,64 +1111,15 @@ export const updateTaskSubmission =
     // UPDATE RESPONSE
     // ========================================================
 
-    if (data.response) {
-      submission.response = {
-        answer:
-          data.response.answer ??
-          submission.response.answer,
-
-        selectedLabel:
-          data.response.selectedLabel ??
+    if (
+      data.response !==
+      undefined
+    ) {
+      submission.response =
+        normalizeResponse(
+          data.response,
           submission.response
-            .selectedLabel,
-
-        ranking:
-          data.response.ranking ??
-          submission.response.ranking,
-
-        rewrittenText:
-          data.response
-            .rewrittenText ??
-          submission.response
-            .rewrittenText,
-
-        transcription:
-          data.response
-            .transcription ??
-          submission.response
-            .transcription,
-
-        code:
-          data.response.code ??
-          submission.response.code,
-
-        boundingBoxes:
-          data.response
-            .boundingBoxes ??
-          submission.response
-            .boundingBoxes,
-
-        evaluation: {
-          score:
-            data.response
-              .evaluation?.score ??
-            submission.response
-              .evaluation.score,
-
-         criteria:
-  data.response.evaluation?.criteria
-    ? data.response.evaluation.criteria.map(
-        (criterion) => ({
-          criterion: criterion.criterion,
-          score: criterion.score,
-          feedback:
-            criterion.feedback ?? "",
-        })
-      )
-    : submission.response
-        .evaluation.criteria,
-        },
-      };
+        );
     }
 
     // ========================================================
@@ -831,11 +1127,16 @@ export const updateTaskSubmission =
     // ========================================================
 
     if (
-      data.feedback !== undefined
+      data.feedback !==
+      undefined
     ) {
       submission.feedback =
         data.feedback;
     }
+
+    // ========================================================
+    // STATUS IS NOT CLIENT CONTROLLED
+    // ========================================================
 
     await submission.save();
 
@@ -854,7 +1155,7 @@ export const submitTaskSubmission =
   ) => {
     validateObjectId(
       submissionId,
-      "task submission ID"
+      "submission ID"
     );
 
     validateObjectId(
@@ -880,7 +1181,7 @@ export const submitTaskSubmission =
     }
 
     // ========================================================
-    // VERIFY OWNER
+    // OWNER CHECK
     // ========================================================
 
     if (
@@ -889,12 +1190,12 @@ export const submitTaskSubmission =
     ) {
       throw new ApiError(
         403,
-        "You can only submit your own submission"
+        "You can only submit your own task submission"
       );
     }
 
     // ========================================================
-    // GET TASK
+    // FIND TASK
     // ========================================================
 
     const task =
@@ -909,22 +1210,46 @@ export const submitTaskSubmission =
       );
     }
 
+    ensureTaskBelongsToContributor(
+      task,
+      contributorId
+    );
+
     // ========================================================
-    // VERIFY TASK OWNER
+    // ASSIGNMENT CHECK
     // ========================================================
 
-    if (
-      task.claimedBy?.toString() !==
-      contributorId
-    ) {
+    const assignment =
+      await getContributorAssignment(
+        task.project,
+        contributorId
+      );
+
+    if (!assignment) {
       throw new ApiError(
         403,
-        "This task is not assigned to you"
+        "You are not assigned to this project"
       );
     }
 
     // ========================================================
-    // VERIFY TASK STATUS
+    // SUBMISSION STATUS
+    // ========================================================
+
+    if (
+      submission.status !==
+        "DRAFT" &&
+      submission.status !==
+        "REVISION"
+    ) {
+      throw new ApiError(
+        400,
+        "This submission cannot be submitted again"
+      );
+    }
+
+    // ========================================================
+    // TASK STATUS
     // ========================================================
 
     if (
@@ -935,7 +1260,7 @@ export const submitTaskSubmission =
     ) {
       throw new ApiError(
         400,
-        "This task cannot be submitted"
+        "Task cannot be submitted in its current status"
       );
     }
 
@@ -943,70 +1268,31 @@ export const submitTaskSubmission =
     // UPDATE RESPONSE
     // ========================================================
 
-    submission.response = {
-      answer:
-        data.response.answer ??
-        submission.response.answer,
-
-      selectedLabel:
-        data.response.selectedLabel ??
-        submission.response
-          .selectedLabel,
-
-      ranking:
-        data.response.ranking ??
-        submission.response.ranking,
-
-      rewrittenText:
-        data.response.rewrittenText ??
-        submission.response
-          .rewrittenText,
-
-      transcription:
-        data.response.transcription ??
-        submission.response
-          .transcription,
-
-      code:
-        data.response.code ??
-        submission.response.code,
-
-      boundingBoxes:
-        data.response.boundingBoxes ??
-        submission.response
-          .boundingBoxes,
-
-      evaluation: {
-        score:
-          data.response.evaluation
-            ?.score ??
+    if (
+      data.response !==
+      undefined
+    ) {
+      submission.response =
+        normalizeResponse(
+          data.response,
           submission.response
-            .evaluation.score,
+        );
+    }
 
-      criteria:
-  data.response.evaluation?.criteria
-    ? data.response.evaluation.criteria.map(
-        (criterion) => ({
-          criterion: criterion.criterion,
-          score: criterion.score,
-          feedback:
-            criterion.feedback ?? "",
-        })
-      )
-    : submission.response
-        .evaluation.criteria,
-      },
-    };
+    // ========================================================
+    // UPDATE FEEDBACK
+    // ========================================================
 
     if (
-      data.feedback !== undefined
+      data.feedback !==
+      undefined
     ) {
       submission.feedback =
         data.feedback;
     }
 
     // ========================================================
-    // UPDATE SUBMISSION STATUS
+    // SERVER CONTROLLED STATUS
     // ========================================================
 
     submission.status =
@@ -1015,13 +1301,14 @@ export const submitTaskSubmission =
     submission.submittedAt =
       new Date();
 
-    submission.reviewedAt = null;
+    submission.reviewedAt =
+      null;
 
     submission.revisionRequestedAt =
       null;
 
     // ========================================================
-    // UPDATE TASK STATUS
+    // TASK STATUS
     // ========================================================
 
     task.status =
@@ -1030,13 +1317,24 @@ export const submitTaskSubmission =
     task.submittedAt =
       new Date();
 
+    // ========================================================
+    // REVIEW REQUIRED
+    // ========================================================
+
     if (
       task.configuration
-        .reviewRequired
+        ?.reviewRequired
     ) {
       task.status =
         "UNDER_REVIEW";
+
+      submission.status =
+        "UNDER_REVIEW";
     }
+
+    // ========================================================
+    // SAVE
+    // ========================================================
 
     await submission.save();
 
@@ -1054,11 +1352,17 @@ export const submitTaskSubmission =
 
 export const markSubmissionUnderReview =
   async (
-    submissionId: string
+    submissionId: string,
+    reviewerId: string
   ) => {
     validateObjectId(
       submissionId,
-      "task submission ID"
+      "submission ID"
+    );
+
+    validateObjectId(
+      reviewerId,
+      "reviewer ID"
     );
 
     const submission =
@@ -1073,9 +1377,31 @@ export const markSubmissionUnderReview =
       );
     }
 
+    // ========================================================
+    // FIND TASK
+    // ========================================================
+
+    const task =
+      await Task.findById(
+        submission.task
+      );
+
+    if (!task) {
+      throw new ApiError(
+        404,
+        "Task not found"
+      );
+    }
+
+    // ========================================================
+    // ONLY SUBMITTED / UNDER REVIEW
+    // ========================================================
+
     if (
       submission.status !==
-      "SUBMITTED"
+        "SUBMITTED" &&
+      submission.status !==
+        "UNDER_REVIEW"
     ) {
       throw new ApiError(
         400,
@@ -1083,10 +1409,38 @@ export const markSubmissionUnderReview =
       );
     }
 
+    if (
+      task.status !==
+        "SUBMITTED" &&
+      task.status !==
+        "UNDER_REVIEW"
+    ) {
+      throw new ApiError(
+        400,
+        "Task is not ready for review"
+      );
+    }
+
+    // ========================================================
+    // UPDATE SUBMISSION
+    // ========================================================
+
     submission.status =
+      "UNDER_REVIEW";
+
+    // ========================================================
+    // UPDATE TASK
+    // ========================================================
+
+    task.status =
       "UNDER_REVIEW";
 
     await submission.save();
 
-    return submission;
+    await task.save();
+
+    return {
+      submission,
+      task,
+    };
   };

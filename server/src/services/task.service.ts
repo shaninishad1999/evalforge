@@ -1,9 +1,15 @@
 import mongoose from "mongoose";
 
 import Task from "../models/Task.js";
+
 import Dataset from "../models/Dataset.js";
+
 import DatasetItem from "../models/DatasetItem.js";
+
 import Project from "../models/Project.js";
+
+import ProjectAssignment from "../models/ProjectAssignment.js";
+
 import ApiError from "../utils/ApiError.js";
 
 import {
@@ -29,6 +35,65 @@ const validateObjectId = (
 };
 
 // ============================================================
+// CHECK PROJECT MANAGEMENT ACCESS
+// ============================================================
+
+const canManageProject = (
+  project: {
+    client: mongoose.Types.ObjectId;
+    projectManager:
+      | mongoose.Types.ObjectId
+      | null;
+  },
+  userId: string,
+  userRole: string
+) => {
+  if (
+    userRole === "SUPER_ADMIN" ||
+    userRole === "ADMIN"
+  ) {
+    return true;
+  }
+
+  if (
+    userRole === "CLIENT" &&
+    project.client.toString() === userId
+  ) {
+    return true;
+  }
+
+  if (
+    userRole === "PROJECT_MANAGER" &&
+    project.projectManager?.toString() === userId
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+// ============================================================
+// CHECK CONTRIBUTOR PROJECT ASSIGNMENT
+// ============================================================
+
+const getContributorAssignment = async (
+  projectId: mongoose.Types.ObjectId,
+  contributorId: string
+) => {
+  return ProjectAssignment.findOne({
+    project: projectId,
+    contributor: contributorId,
+    status: {
+      $in: [
+        "PENDING",
+        "ACTIVE",
+        "PAUSED",
+      ],
+    },
+  });
+};
+
+// ============================================================
 // CREATE TASK
 // ============================================================
 
@@ -37,12 +102,24 @@ export const createTask = async (
   userRole: string,
   input: unknown
 ) => {
-  validateObjectId(userId, "user ID");
+  validateObjectId(
+    userId,
+    "user ID"
+  );
 
-  const data = createTaskSchema.parse(input);
+  const data =
+    createTaskSchema.parse(input);
 
-  validateObjectId(data.project, "project ID");
-  validateObjectId(data.dataset, "dataset ID");
+  validateObjectId(
+    data.project,
+    "project ID"
+  );
+
+  validateObjectId(
+    data.dataset,
+    "dataset ID"
+  );
+
   validateObjectId(
     data.datasetItem,
     "dataset item ID"
@@ -52,9 +129,10 @@ export const createTask = async (
   // FIND PROJECT
   // ==========================================================
 
-  const project = await Project.findById(
-    data.project
-  );
+  const project =
+    await Project.findById(
+      data.project
+    );
 
   if (!project) {
     throw new ApiError(
@@ -64,12 +142,30 @@ export const createTask = async (
   }
 
   // ==========================================================
+  // PERMISSION CHECK
+  // ==========================================================
+
+  if (
+    !canManageProject(
+      project,
+      userId,
+      userRole
+    )
+  ) {
+    throw new ApiError(
+      403,
+      "You do not have permission to create tasks for this project"
+    );
+  }
+
+  // ==========================================================
   // FIND DATASET
   // ==========================================================
 
-  const dataset = await Dataset.findById(
-    data.dataset
-  );
+  const dataset =
+    await Dataset.findById(
+      data.dataset
+    );
 
   if (!dataset) {
     throw new ApiError(
@@ -137,35 +233,7 @@ export const createTask = async (
   }
 
   // ==========================================================
-  // PERMISSION CHECK
-  // ==========================================================
-
-  const isAdmin =
-    userRole === "SUPER_ADMIN" ||
-    userRole === "ADMIN";
-
-  const isClient =
-    userRole === "CLIENT" &&
-    project.client.toString() === userId;
-
-  const isProjectManager =
-    userRole === "PROJECT_MANAGER" &&
-    project.projectManager?.toString() ===
-      userId;
-
-  if (
-    !isAdmin &&
-    !isClient &&
-    !isProjectManager
-  ) {
-    throw new ApiError(
-      403,
-      "You do not have permission to create tasks for this project"
-    );
-  }
-
-  // ==========================================================
-  // VERIFY TASK TYPE IS ALLOWED BY PROJECT
+  // VERIFY TASK TYPE
   // ==========================================================
 
   if (
@@ -204,57 +272,66 @@ export const createTask = async (
 
   // ==========================================================
   // CREATE TASK
+  //
+  // New tasks ALWAYS start as CREATED.
+  // A client cannot create an already-approved/claimed task.
   // ==========================================================
 
-  const task = await Task.create({
-    project: data.project,
-    dataset: data.dataset,
-    datasetItem: data.datasetItem,
+  const task =
+    await Task.create({
+      project: data.project,
 
-    type: data.type,
+      dataset: data.dataset,
 
-    title: data.title,
+      datasetItem: data.datasetItem,
 
-    instructions: data.instructions,
+      type: data.type,
 
-    prompt: data.prompt ?? "",
+      title: data.title,
 
-    evaluationCriteria:
-      data.evaluationCriteria ?? [],
+      instructions: data.instructions,
 
-    configuration: {
-      maxAttempts:
-        data.configuration?.maxAttempts ??
-        3,
+      prompt: data.prompt ?? "",
 
-      timeLimitMinutes:
-        data.configuration
-          ?.timeLimitMinutes ?? null,
+      evaluationCriteria:
+        data.evaluationCriteria ?? [],
 
-      reviewRequired:
-        data.configuration
-          ?.reviewRequired ?? true,
-    },
+      configuration: {
+        maxAttempts:
+          data.configuration?.maxAttempts ??
+          3,
 
-    reward: {
-      amount: data.reward.amount,
+        timeLimitMinutes:
+          data.configuration
+            ?.timeLimitMinutes ?? null,
 
-      currency:
-        data.reward.currency ??
-        project.rewardConfiguration
-          .currency ??
-        "INR",
-    },
+        reviewRequired:
+          data.configuration
+            ?.reviewRequired ?? true,
+      },
 
-    status:
-      data.status ?? "CREATED",
+      reward: {
+        amount: data.reward.amount,
 
-    claimedBy: null,
-    claimedAt: null,
-    startedAt: null,
-    submittedAt: null,
-    reviewedAt: null,
-  });
+        currency:
+          data.reward.currency ??
+          project.rewardConfiguration
+            .currency ??
+          "INR",
+      },
+
+      status: "CREATED",
+
+      claimedBy: null,
+
+      claimedAt: null,
+
+      startedAt: null,
+
+      submittedAt: null,
+
+      reviewedAt: null,
+    });
 
   return task;
 };
@@ -273,25 +350,24 @@ export const getTaskById = async (
     "task ID"
   );
 
-  const task = await Task.findById(
-    taskId
-  )
-    .populate(
-      "project",
-      "title description client projectManager status"
-    )
-    .populate(
-      "dataset",
-      "name description type status project"
-    )
-    .populate(
-      "datasetItem",
-      "type content metadata status"
-    )
-    .populate(
-      "claimedBy",
-      "name email role"
-    );
+  const task =
+    await Task.findById(taskId)
+      .populate(
+        "project",
+        "title description client projectManager status"
+      )
+      .populate(
+        "dataset",
+        "name description type status project"
+      )
+      .populate(
+        "datasetItem",
+        "type content metadata status"
+      )
+      .populate(
+        "claimedBy",
+        "name email role"
+      );
 
   if (!task) {
     throw new ApiError(
@@ -317,6 +393,7 @@ export const getTaskById = async (
 
   const project =
     task.project as unknown as {
+      _id: mongoose.Types.ObjectId;
       client?: mongoose.Types.ObjectId;
       projectManager?:
         | mongoose.Types.ObjectId
@@ -328,7 +405,10 @@ export const getTaskById = async (
   // CLIENT / PROJECT MANAGER ACCESS
   // ==========================================================
 
-  if (userId && userRole) {
+  if (
+    userId &&
+    userRole
+  ) {
     const isClient =
       userRole === "CLIENT" &&
       project.client?.toString() ===
@@ -339,14 +419,9 @@ export const getTaskById = async (
       project.projectManager?.toString() ===
         userId;
 
-    const isClaimedContributor =
-      task.claimedBy?.toString() ===
-      userId;
-
     if (
       isClient ||
-      isProjectManager ||
-      isClaimedContributor
+      isProjectManager
     ) {
       return task;
     }
@@ -356,7 +431,9 @@ export const getTaskById = async (
   // REVIEWER ACCESS
   // ==========================================================
 
-  if (userRole === "REVIEWER") {
+  if (
+    userRole === "REVIEWER"
+  ) {
     return task;
   }
 
@@ -364,24 +441,59 @@ export const getTaskById = async (
   // CONTRIBUTOR ACCESS
   // ==========================================================
 
-  if (userRole === "CONTRIBUTOR") {
-    if (
-      task.status !== "AVAILABLE" &&
-      task.status !== "CLAIMED" &&
-      task.status !== "IN_PROGRESS" &&
-      task.status !== "SUBMITTED" &&
-      task.status !== "UNDER_REVIEW" &&
-      task.status !== "REVISION" &&
-      task.claimedBy?.toString() !==
-        userId
-    ) {
+  if (
+    userRole === "CONTRIBUTOR"
+  ) {
+    if (!userId) {
       throw new ApiError(
-        403,
-        "This task is not available"
+        401,
+        "Authentication required"
       );
     }
 
-    return task;
+    const assignment =
+      await getContributorAssignment(
+        project._id,
+        userId
+      );
+
+    const isClaimedByContributor =
+      task.claimedBy?.toString() ===
+      userId;
+
+    // A contributor can access a claimed task
+    // even if the assignment later becomes paused,
+    // because they already own the task.
+    if (
+      !assignment &&
+      !isClaimedByContributor
+    ) {
+      throw new ApiError(
+        403,
+        "You are not assigned to this project"
+      );
+    }
+
+    // AVAILABLE tasks require an active assignment.
+    if (
+      task.status === "AVAILABLE" &&
+      assignment
+    ) {
+      return task;
+    }
+
+    // All non-available working states require
+    // the task to actually belong to this contributor.
+    if (
+      isClaimedByContributor
+    ) {
+      return task;
+    }
+
+    throw new ApiError(
+      403,
+      "This task is not available"
+    );
   }
 
   throw new ApiError(
@@ -424,7 +536,8 @@ export const getTasks = async (
       "project ID"
     );
 
-    filter.project = filters.projectId;
+    filter.project =
+      filters.projectId;
   }
 
   if (filters?.datasetId) {
@@ -433,15 +546,18 @@ export const getTasks = async (
       "dataset ID"
     );
 
-    filter.dataset = filters.datasetId;
+    filter.dataset =
+      filters.datasetId;
   }
 
   if (filters?.status) {
-    filter.status = filters.status;
+    filter.status =
+      filters.status;
   }
 
   if (filters?.type) {
-    filter.type = filters.type;
+    filter.type =
+      filters.type;
   }
 
   // ==========================================================
@@ -478,7 +594,9 @@ export const getTasks = async (
   // CLIENT
   // ==========================================================
 
-  if (userRole === "CLIENT") {
+  if (
+    userRole === "CLIENT"
+  ) {
     const projects =
       await Project.find({
         client: userId,
@@ -486,7 +604,8 @@ export const getTasks = async (
 
     const projectIds =
       projects.map(
-        (project) => project._id
+        (project) =>
+          project._id
       );
 
     filter.project = {
@@ -520,7 +639,8 @@ export const getTasks = async (
   // ==========================================================
 
   if (
-    userRole === "PROJECT_MANAGER"
+    userRole ===
+    "PROJECT_MANAGER"
   ) {
     const projects =
       await Project.find({
@@ -529,7 +649,8 @@ export const getTasks = async (
 
     const projectIds =
       projects.map(
-        (project) => project._id
+        (project) =>
+          project._id
       );
 
     filter.project = {
@@ -562,7 +683,9 @@ export const getTasks = async (
   // REVIEWER
   // ==========================================================
 
-  if (userRole === "REVIEWER") {
+  if (
+    userRole === "REVIEWER"
+  ) {
     return Task.find(filter)
       .populate(
         "project",
@@ -589,7 +712,40 @@ export const getTasks = async (
   // CONTRIBUTOR
   // ==========================================================
 
-  if (userRole === "CONTRIBUTOR") {
+  if (
+    userRole === "CONTRIBUTOR"
+  ) {
+    const assignments =
+      await ProjectAssignment.find({
+        contributor: userId,
+        status: {
+          $in: [
+            "PENDING",
+            "ACTIVE",
+            "PAUSED",
+          ],
+        },
+      }).select("project");
+
+    const projectIds =
+      assignments.map(
+        (assignment) =>
+          assignment.project
+      );
+
+    if (
+      projectIds.length === 0
+    ) {
+      return [];
+    }
+
+    filter.project = {
+      $in: projectIds,
+    };
+
+    // Contributor can see available tasks
+    // from assigned projects and their own
+    // already-claimed tasks.
     filter.$or = [
       {
         status: "AVAILABLE",
@@ -602,7 +758,7 @@ export const getTasks = async (
     return Task.find(filter)
       .populate(
         "project",
-        "title description client projectManager status"
+        "title client projectManager status"
       )
       .populate(
         "dataset",
@@ -669,28 +825,12 @@ export const updateTask = async (
     );
   }
 
-  // ==========================================================
-  // PERMISSION CHECK
-  // ==========================================================
-
-  const isAdmin =
-    userRole === "SUPER_ADMIN" ||
-    userRole === "ADMIN";
-
-  const isClient =
-    userRole === "CLIENT" &&
-    project.client.toString() ===
-      userId;
-
-  const isProjectManager =
-    userRole === "PROJECT_MANAGER" &&
-    project.projectManager?.toString() ===
-      userId;
-
   if (
-    !isAdmin &&
-    !isClient &&
-    !isProjectManager
+    !canManageProject(
+      project,
+      userId,
+      userRole
+    )
   ) {
     throw new ApiError(
       403,
@@ -699,15 +839,48 @@ export const updateTask = async (
   }
 
   // ==========================================================
+  // PREVENT EDITING COMPLETED TASKS
+  // ==========================================================
+
+  if (
+    [
+      "APPROVED",
+      "REJECTED",
+    ].includes(task.status)
+  ) {
+    throw new ApiError(
+      400,
+      "Completed tasks cannot be edited"
+    );
+  }
+
+  // ==========================================================
   // UPDATE FIELDS
   // ==========================================================
 
-  if (data.type !== undefined) {
-    task.type = data.type;
+  if (
+    data.type !== undefined
+  ) {
+    if (
+      !project.taskConfiguration.taskTypes.includes(
+        data.type
+      )
+    ) {
+      throw new ApiError(
+        400,
+        "This task type is not configured for the project"
+      );
+    }
+
+    task.type =
+      data.type;
   }
 
-  if (data.title !== undefined) {
-    task.title = data.title;
+  if (
+    data.title !== undefined
+  ) {
+    task.title =
+      data.title;
   }
 
   if (
@@ -717,8 +890,11 @@ export const updateTask = async (
       data.instructions;
   }
 
-  if (data.prompt !== undefined) {
-    task.prompt = data.prompt;
+  if (
+    data.prompt !== undefined
+  ) {
+    task.prompt =
+      data.prompt;
   }
 
   if (
@@ -730,43 +906,28 @@ export const updateTask = async (
   }
 
   if (
-    data.configuration !== undefined
+    data.configuration !==
+    undefined
   ) {
     task.configuration = {
-      maxAttempts:
-        data.configuration
-          .maxAttempts ??
-        task.configuration.maxAttempts,
-
-      timeLimitMinutes:
-        data.configuration
-          .timeLimitMinutes ??
-        task.configuration
-          .timeLimitMinutes,
-
-      reviewRequired:
-        data.configuration
-          .reviewRequired ??
-        task.configuration
-          .reviewRequired,
+      ...task.configuration,
+      ...data.configuration,
     };
   }
 
-  if (data.reward !== undefined) {
+  if (
+    data.reward !== undefined
+  ) {
     task.reward = {
-      amount:
-        data.reward.amount ??
-        task.reward.amount,
-
-      currency:
-        data.reward.currency ??
-        task.reward.currency,
+      ...task.reward,
+      ...data.reward,
     };
   }
 
-  if (data.status !== undefined) {
-    task.status = data.status;
-  }
+  // IMPORTANT:
+  // Status is intentionally NOT updated here.
+  // Use updateTaskStatus(), claimTask(), startTask()
+  // and the submission/review lifecycle instead.
 
   await task.save();
 
@@ -777,159 +938,204 @@ export const updateTask = async (
 // UPDATE TASK STATUS
 // ============================================================
 
-export const updateTaskStatus = async (
-  taskId: string,
-  userId: string,
-  userRole: string,
-  input: unknown
-) => {
-  validateObjectId(
-    taskId,
-    "task ID"
-  );
-
-  validateObjectId(
-    userId,
-    "user ID"
-  );
-
-  const data =
-    updateTaskStatusSchema.parse(
-      input
+export const updateTaskStatus =
+  async (
+    taskId: string,
+    userId: string,
+    userRole: string,
+    input: unknown
+  ) => {
+    validateObjectId(
+      taskId,
+      "task ID"
     );
 
-  const task =
-    await Task.findById(taskId);
-
-  if (!task) {
-    throw new ApiError(
-      404,
-      "Task not found"
-    );
-  }
-
-  // ==========================================================
-  // ADMIN / CLIENT / PROJECT MANAGER
-  // ==========================================================
-
-  if (
-    userRole === "SUPER_ADMIN" ||
-    userRole === "ADMIN"
-  ) {
-    task.status = data.status;
-
-    await task.save();
-
-    return task;
-  }
-
-  const project =
-    await Project.findById(
-      task.project
+    validateObjectId(
+      userId,
+      "user ID"
     );
 
-  if (!project) {
-    throw new ApiError(
-      404,
-      "Project not found"
-    );
-  }
+    const data =
+      updateTaskStatusSchema.parse(
+        input
+      );
 
-  const isClient =
-    userRole === "CLIENT" &&
-    project.client.toString() ===
-      userId;
+    const task =
+      await Task.findById(
+        taskId
+      );
 
-  const isProjectManager =
-    userRole === "PROJECT_MANAGER" &&
-    project.projectManager?.toString() ===
-      userId;
-
-  if (
-    isClient ||
-    isProjectManager
-  ) {
-    task.status = data.status;
-
-    await task.save();
-
-    return task;
-  }
-
-  // ==========================================================
-  // CONTRIBUTOR STATUS TRANSITIONS
-  // ==========================================================
-
-  if (userRole === "CONTRIBUTOR") {
-    if (
-      task.claimedBy?.toString() !==
-      userId
-    ) {
+    if (!task) {
       throw new ApiError(
-        403,
-        "This task is not assigned to you"
+        404,
+        "Task not found"
       );
     }
 
-    const allowedTransitions: Record<
-      string,
-      string[]
-    > = {
-      CLAIMED: [
-        "IN_PROGRESS",
-      ],
+    const project =
+      await Project.findById(
+        task.project
+      );
 
-      IN_PROGRESS: [
-        "SUBMITTED",
-        "REVISION",
-      ],
-    };
+    if (!project) {
+      throw new ApiError(
+        404,
+        "Project not found"
+      );
+    }
 
-    const allowed =
-      allowedTransitions[
-        task.status
-      ] ?? [];
+    // ========================================================
+    // ADMIN
+    // ========================================================
 
     if (
-      !allowed.includes(
-        data.status
-      )
+      userRole === "SUPER_ADMIN" ||
+      userRole === "ADMIN"
     ) {
       throw new ApiError(
         400,
-        `Cannot change task status from ${task.status} to ${data.status}`
+        "Use the dedicated task lifecycle endpoints instead of manually changing task status"
       );
     }
 
-    task.status = data.status;
+    // ========================================================
+    // CLIENT / PROJECT MANAGER
+    // ========================================================
 
     if (
-      data.status ===
-      "IN_PROGRESS"
+      userRole === "CLIENT" ||
+      userRole === "PROJECT_MANAGER"
     ) {
-      task.startedAt =
-        task.startedAt ??
-        new Date();
+      if (
+        !canManageProject(
+          project,
+          userId,
+          userRole
+        )
+      ) {
+        throw new ApiError(
+          403,
+          "You do not have permission to update this task"
+        );
+      }
+
+      const managementTransitions:
+        Record<string, string[]> = {
+          CREATED: [
+            "AVAILABLE",
+          ],
+
+          AVAILABLE: [
+            "CREATED",
+          ],
+
+          SUBMITTED: [
+            "UNDER_REVIEW",
+          ],
+        };
+
+      const allowed =
+        managementTransitions[
+          task.status
+        ] ?? [];
+
+      if (
+        !allowed.includes(
+          data.status
+        )
+      ) {
+        throw new ApiError(
+          400,
+          `Cannot change task status from ${task.status} to ${data.status}`
+        );
+      }
+
+      task.status =
+        data.status;
+
+      await task.save();
+
+      return task;
     }
+
+    // ========================================================
+    // CONTRIBUTOR
+    // ========================================================
 
     if (
-      data.status ===
-      "SUBMITTED"
+      userRole === "CONTRIBUTOR"
     ) {
-      task.submittedAt =
-        new Date();
+      if (
+        task.claimedBy?.toString() !==
+        userId
+      ) {
+        throw new ApiError(
+          403,
+          "This task is not assigned to you"
+        );
+      }
+
+      const contributorTransitions:
+        Record<string, string[]> = {
+          CLAIMED: [
+            "IN_PROGRESS",
+          ],
+
+          IN_PROGRESS: [
+            "SUBMITTED",
+          ],
+
+          REVISION: [
+            "IN_PROGRESS",
+          ],
+        };
+
+      const allowed =
+        contributorTransitions[
+          task.status
+        ] ?? [];
+
+      if (
+        !allowed.includes(
+          data.status
+        )
+      ) {
+        throw new ApiError(
+          400,
+          `Cannot change task status from ${task.status} to ${data.status}`
+        );
+      }
+
+      task.status =
+        data.status;
+
+      if (
+        data.status ===
+        "IN_PROGRESS"
+      ) {
+        task.startedAt =
+          task.startedAt ??
+          new Date();
+      }
+
+      if (
+        data.status ===
+        "SUBMITTED"
+      ) {
+        task.submittedAt =
+          new Date();
+      }
+
+      await task.save();
+
+      return task;
     }
 
-    await task.save();
-
-    return task;
-  }
-
-  throw new ApiError(
-    403,
-    "You do not have permission to update this task status"
-  );
-};
+    throw new ApiError(
+      403,
+      "You do not have permission to update this task status"
+    );
+  };
 
 // ============================================================
 // CLAIM TASK
@@ -950,7 +1156,9 @@ export const claimTask = async (
   );
 
   const task =
-    await Task.findById(taskId);
+    await Task.findById(
+      taskId
+    );
 
   if (!task) {
     throw new ApiError(
@@ -959,8 +1167,13 @@ export const claimTask = async (
     );
   }
 
+  // ==========================================================
+  // VERIFY TASK AVAILABILITY
+  // ==========================================================
+
   if (
-    task.status !== "AVAILABLE"
+    task.status !==
+    "AVAILABLE"
   ) {
     throw new ApiError(
       400,
@@ -968,26 +1181,72 @@ export const claimTask = async (
     );
   }
 
-  if (task.claimedBy) {
+  // ==========================================================
+  // VERIFY PROJECT ASSIGNMENT
+  // ==========================================================
+
+  const assignment =
+    await ProjectAssignment.findOne({
+      project: task.project,
+      contributor: contributorId,
+      status: {
+        $in: [
+          "PENDING",
+          "ACTIVE",
+        ],
+      },
+    });
+
+  if (!assignment) {
+    throw new ApiError(
+      403,
+      "You are not assigned to this project"
+    );
+  }
+
+  // ==========================================================
+  // ATOMIC CLAIM
+  //
+  // status + claimedBy are checked by MongoDB itself.
+  // Therefore two simultaneous requests cannot both
+  // successfully claim the same task.
+  // ==========================================================
+
+  const claimedTask =
+    await Task.findOneAndUpdate(
+      {
+        _id: taskId,
+        status: "AVAILABLE",
+        claimedBy: null,
+      },
+      {
+        $set: {
+          claimedBy:
+            new mongoose.Types.ObjectId(
+              contributorId
+            ),
+
+          claimedAt:
+            new Date(),
+
+          status:
+            "CLAIMED",
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+  if (!claimedTask) {
     throw new ApiError(
       409,
       "This task has already been claimed"
     );
   }
 
-  task.claimedBy =
-    new mongoose.Types.ObjectId(
-      contributorId
-    );
-
-  task.claimedAt =
-    new Date();
-
-  task.status = "CLAIMED";
-
-  await task.save();
-
-  return task;
+  return claimedTask;
 };
 
 // ============================================================
@@ -1009,7 +1268,9 @@ export const startTask = async (
   );
 
   const task =
-    await Task.findById(taskId);
+    await Task.findById(
+      taskId
+    );
 
   if (!task) {
     throw new ApiError(
@@ -1029,12 +1290,14 @@ export const startTask = async (
   }
 
   if (
-    task.status !== "CLAIMED" &&
-    task.status !== "REVISION"
+    task.status !==
+      "CLAIMED" &&
+    task.status !==
+      "REVISION"
   ) {
     throw new ApiError(
       400,
-      "This task cannot be started"
+      "Task cannot be started in its current status"
     );
   }
 
@@ -1070,7 +1333,9 @@ export const publishTask = async (
   );
 
   const task =
-    await Task.findById(taskId);
+    await Task.findById(
+      taskId
+    );
 
   if (!task) {
     throw new ApiError(
@@ -1091,24 +1356,12 @@ export const publishTask = async (
     );
   }
 
-  const isAdmin =
-    userRole === "SUPER_ADMIN" ||
-    userRole === "ADMIN";
-
-  const isClient =
-    userRole === "CLIENT" &&
-    project.client.toString() ===
-      userId;
-
-  const isProjectManager =
-    userRole === "PROJECT_MANAGER" &&
-    project.projectManager?.toString() ===
-      userId;
-
   if (
-    !isAdmin &&
-    !isClient &&
-    !isProjectManager
+    !canManageProject(
+      project,
+      userId,
+      userRole
+    )
   ) {
     throw new ApiError(
       403,
@@ -1117,11 +1370,24 @@ export const publishTask = async (
   }
 
   if (
-    task.status !== "CREATED"
+    task.status !==
+    "CREATED"
   ) {
     throw new ApiError(
       400,
-      "Only created tasks can be published"
+      "Only CREATED tasks can be published"
+    );
+  }
+
+  if (
+    project.status !==
+      "PUBLISHED" &&
+    project.status !==
+      "ACTIVE"
+  ) {
+    throw new ApiError(
+      400,
+      "Project must be published or active before its tasks can be published"
     );
   }
 

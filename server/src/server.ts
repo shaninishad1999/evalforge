@@ -55,6 +55,7 @@ import {
 } from "./services/notification.service.js";
 import projectAssignmentRoutes from "./routes/projectAssignment.routes.js";
 import adminUserRoutes from "./routes/adminUser.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
 dotenv.config();
 
 const app = express();
@@ -255,6 +256,7 @@ app.use(
   "/api/admin/users",
   adminUserRoutes
 );
+app.use("/api/dashboard", dashboardRoutes);
 // ============================================
 // Global Error Handler
 // IMPORTANT: Must be after all routes

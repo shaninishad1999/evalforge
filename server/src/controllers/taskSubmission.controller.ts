@@ -79,6 +79,13 @@ export const getTaskSubmission =
     req: AuthenticatedRequest,
     res: Response
   ) => {
+    if (!req.user) {
+      throw new ApiError(
+        401,
+        "Authentication required"
+      );
+    }
+
     const submissionId =
       typeof req.params
         .taskSubmissionId ===
@@ -96,8 +103,8 @@ export const getTaskSubmission =
     const submission =
       await getTaskSubmissionById(
         submissionId,
-        req.user?.userId,
-        req.user?.role
+        req.user.userId,
+        req.user.role
       );
 
     res.status(200).json({
@@ -313,7 +320,8 @@ export const moveSubmissionToReview =
 
     const submission =
       await markSubmissionUnderReview(
-        submissionId
+        submissionId,
+        req.user.userId
       );
 
     res.status(200).json({

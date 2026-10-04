@@ -54,6 +54,7 @@ import {
   setNotificationSocket,
 } from "./services/notification.service.js";
 import projectAssignmentRoutes from "./routes/projectAssignment.routes.js";
+import adminUserRoutes from "./routes/adminUser.routes.js";
 dotenv.config();
 
 const app = express();
@@ -249,6 +250,10 @@ app.use(
 app.use(
   "/api/project-assignments",
   projectAssignmentRoutes
+);
+app.use(
+  "/api/admin/users",
+  adminUserRoutes
 );
 // ============================================
 // Global Error Handler

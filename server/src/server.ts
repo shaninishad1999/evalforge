@@ -16,6 +16,7 @@ import errorHandler from "./middleware/errorHandler.js";
 import userRoutes from "./routes/user.routes.js";
 import projectRoutes from "./routes/project.routes.js";
 import qualificationRoutes from "./routes/qualification.routes.js";
+import datasetRoutes from "./routes/dataset.routes.js";
 dotenv.config();
 
 const app = express();
@@ -84,6 +85,10 @@ app.use("/api/projects", projectRoutes);
 app.use(
   "/api/qualifications",
   qualificationRoutes
+);
+app.use(
+  "/api/datasets",
+  datasetRoutes
 );
 // ============================================
 // Global Error Handler

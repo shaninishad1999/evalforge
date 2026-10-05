@@ -17,6 +17,11 @@ import {
   publishAvailableTask,
 } from "../controllers/task.controller.js";
 
+import {
+  pauseTaskController,
+  resumeTaskController,
+} from "../controllers/taskPause.controller.js";
+
 // ============================================================
 // ROUTER
 // ============================================================
@@ -90,6 +95,24 @@ router.post(
 router.post(
   "/:taskId/start",
   asyncHandler(startClaimedTask)
+);
+
+// ============================================================
+// PAUSE TASK
+// ============================================================
+
+router.post(
+  "/:taskId/pause",
+  asyncHandler(pauseTaskController)
+);
+
+// ============================================================
+// RESUME TASK
+// ============================================================
+
+router.post(
+  "/:taskId/resume",
+  asyncHandler(resumeTaskController)
 );
 
 // ============================================================

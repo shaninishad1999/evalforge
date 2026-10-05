@@ -12,6 +12,7 @@ export type TaskStatus =
   | "AVAILABLE"
   | "CLAIMED"
   | "IN_PROGRESS"
+  | "PAUSED"
   | "SUBMITTED"
   | "UNDER_REVIEW"
   | "APPROVED"
@@ -57,6 +58,11 @@ export interface ITask extends Document {
     maxAttempts: number;
     timeLimitMinutes: number | null;
     reviewRequired: boolean;
+
+    // Maximum pause duration allowed for this task.
+    // Client decides this value.
+    // Minimum allowed value is 1 second.
+    maxPauseSeconds: number;
   };
 
   reward: {
@@ -71,6 +77,22 @@ export interface ITask extends Document {
   claimedAt: Date | null;
 
   startedAt: Date | null;
+
+  // ==========================================================
+  // PAUSE TRACKING
+  // ==========================================================
+
+  // Time when the current pause started.
+  pauseStartedAt: Date | null;
+
+  // Time when the current pause must automatically expire.
+  pauseExpiresAt: Date | null;
+
+  // Total accumulated pause duration for this task.
+  totalPausedSeconds: number;
+
+  // Number of times this task has been paused.
+  pauseCount: number;
 
   submittedAt: Date | null;
 
@@ -208,6 +230,29 @@ const taskSchema = new Schema<ITask>(
         type: Boolean,
         default: true,
       },
+
+      // ======================================================
+      // MAXIMUM PAUSE DURATION
+      // ======================================================
+      //
+      // Client decides the maximum pause duration.
+      //
+      // Examples:
+      // 1     = 1 second
+      // 60    = 1 minute
+      // 300   = 5 minutes
+      // 600   = 10 minutes
+      // 1800  = 30 minutes
+      //
+      // Minimum allowed value = 1 second.
+      // ======================================================
+
+      maxPauseSeconds: {
+        type: Number,
+        required: true,
+        default: 600,
+        min: 1,
+      },
     },
 
     // ========================================================
@@ -240,6 +285,7 @@ const taskSchema = new Schema<ITask>(
         "AVAILABLE",
         "CLAIMED",
         "IN_PROGRESS",
+        "PAUSED",
         "SUBMITTED",
         "UNDER_REVIEW",
         "APPROVED",
@@ -277,6 +323,45 @@ const taskSchema = new Schema<ITask>(
     startedAt: {
       type: Date,
       default: null,
+    },
+
+    // ========================================================
+    // PAUSE STARTED AT
+    // ========================================================
+
+    pauseStartedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // ========================================================
+    // PAUSE EXPIRES AT
+    // ========================================================
+
+    pauseExpiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    // ========================================================
+    // TOTAL PAUSED SECONDS
+    // ========================================================
+
+    totalPausedSeconds: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // ========================================================
+    // PAUSE COUNT
+    // ========================================================
+
+    pauseCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
 
     // ========================================================

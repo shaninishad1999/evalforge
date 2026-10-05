@@ -45,6 +45,9 @@ import withdrawalRoutes from "./routes/withdrawal.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import auditLogRoutes from "./routes/auditLog.routes.js";
+import projectAssignmentRoutes from "./routes/projectAssignment.routes.js";
+import adminUserRoutes from "./routes/adminUser.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
 
 import {
   initializeSocket,
@@ -53,9 +56,11 @@ import {
 import {
   setNotificationSocket,
 } from "./services/notification.service.js";
-import projectAssignmentRoutes from "./routes/projectAssignment.routes.js";
-import adminUserRoutes from "./routes/adminUser.routes.js";
-import dashboardRoutes from "./routes/dashboard.routes.js";
+
+import {
+  startTaskTimerWorker,
+} from "./services/taskTimer.service.js";
+
 dotenv.config();
 
 const app = express();
@@ -149,114 +154,30 @@ app.get(
 // API Routes
 // ============================================
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
-
-app.use(
-  "/api/admin",
-  adminRoutes
-);
-
-app.use(
-  "/api/client",
-  clientRoutes
-);
-
-app.use(
-  "/api/project-manager",
-  projectManagerRoutes
-);
-
-app.use(
-  "/api/reviewer",
-  reviewerRoutes
-);
-
-app.use(
-  "/api/contributor",
-  contributorRoutes
-);
-
-app.use(
-  "/api/users",
-  userRoutes
-);
-
-app.use(
-  "/api/projects",
-  projectRoutes
-);
-
-app.use(
-  "/api/qualifications",
-  qualificationRoutes
-);
-
-app.use(
-  "/api/datasets",
-  datasetRoutes
-);
-
-app.use(
-  "/api/dataset-items",
-  datasetItemRoutes
-);
-
-app.use(
-  "/api/tasks",
-  taskRoutes
-);
-
-app.use(
-  "/api/task-submissions",
-  taskSubmissionRoutes
-);
-
-app.use(
-  "/api/task-reviews",
-  taskReviewRoutes
-);
-
-app.use(
-  "/api/earnings",
-  earningRoutes
-);
-
-app.use(
-  "/api/wallets",
-  walletRoutes
-);
-
-app.use(
-  "/api/withdrawals",
-  withdrawalRoutes
-);
-
-app.use(
-  "/api/payments",
-  paymentRoutes
-);
-
-app.use(
-  "/api/notifications",
-  notificationRoutes
-);
-
-app.use(
-  "/api/audit-logs",
-  auditLogRoutes
-);
-app.use(
-  "/api/project-assignments",
-  projectAssignmentRoutes
-);
-app.use(
-  "/api/admin/users",
-  adminUserRoutes
-);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/client", clientRoutes);
+app.use("/api/project-manager", projectManagerRoutes);
+app.use("/api/reviewer", reviewerRoutes);
+app.use("/api/contributor", contributorRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/qualifications", qualificationRoutes);
+app.use("/api/datasets", datasetRoutes);
+app.use("/api/dataset-items", datasetItemRoutes);
+app.use("/api/tasks", taskRoutes);
+app.use("/api/task-submissions", taskSubmissionRoutes);
+app.use("/api/task-reviews", taskReviewRoutes);
+app.use("/api/earnings", earningRoutes);
+app.use("/api/wallets", walletRoutes);
+app.use("/api/withdrawals", withdrawalRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/project-assignments", projectAssignmentRoutes);
+app.use("/api/admin/users", adminUserRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+
 // ============================================
 // Global Error Handler
 // IMPORTANT: Must be after all routes
@@ -300,16 +221,35 @@ initializeSocket(io);
 setNotificationSocket(io);
 
 // ============================================
-// Start Server
+// START SERVER
 // ============================================
 
 const startServer =
   async () => {
     try {
-      // Connect MongoDB first
+      // ==========================================
+      // CONNECT MONGODB
+      // ==========================================
+
       await connectDB();
 
-      // Start HTTP + Socket.io server
+      // ==========================================
+      // START TASK TIMER WORKER
+      // ==========================================
+      //
+      // Handles:
+      // 1. Expired task pauses
+      // 2. Expired task active timers
+      //
+      // Server remains the source of truth.
+      //
+
+      startTaskTimerWorker();
+
+      // ==========================================
+      // START HTTP + SOCKET.IO SERVER
+      // ==========================================
+
       httpServer.listen(
         PORT,
         () => {

@@ -36,6 +36,7 @@ const taskStatusEnum = z.enum([
   "AVAILABLE",
   "CLAIMED",
   "IN_PROGRESS",
+  "PAUSED",
   "SUBMITTED",
   "UNDER_REVIEW",
   "APPROVED",
@@ -69,6 +70,23 @@ const rewardSchema = z.object({
 // ============================================================
 // TASK CONFIGURATION
 // ============================================================
+//
+// maxPauseSeconds:
+// - Client decides the maximum pause duration.
+// - Minimum allowed value = 1 second.
+//
+// Examples:
+//
+// 1     = 1 second
+// 10    = 10 seconds
+// 60    = 1 minute
+// 300   = 5 minutes
+// 600   = 10 minutes
+// 1800  = 30 minutes
+//
+// The contributor cannot pause beyond this configured value.
+//
+// ============================================================
 
 const taskConfigurationSchema =
   z.object({
@@ -95,6 +113,19 @@ const taskConfigurationSchema =
     reviewRequired: z
       .boolean()
       .default(true),
+
+    // ========================================================
+    // MAXIMUM PAUSE DURATION
+    // ========================================================
+
+    maxPauseSeconds: z
+      .number()
+      .int()
+      .min(
+        1,
+        "Maximum pause duration must be at least 1 second"
+      )
+      .optional(),
   });
 
 // ============================================================
@@ -111,6 +142,10 @@ const taskConfigurationSchema =
 // - claimedBy
 // - claimedAt
 // - startedAt
+// - pauseStartedAt
+// - pauseExpiresAt
+// - totalPausedSeconds
+// - pauseCount
 // - submittedAt
 // - reviewedAt
 //
@@ -224,6 +259,10 @@ export const createTaskSchema =
 // - claimedBy
 // - claimedAt
 // - startedAt
+// - pauseStartedAt
+// - pauseExpiresAt
+// - totalPausedSeconds
+// - pauseCount
 // - submittedAt
 // - reviewedAt
 //
@@ -331,6 +370,10 @@ export const updateTaskSchema =
     // claimedBy
     // claimedAt
     // startedAt
+    // pauseStartedAt
+    // pauseExpiresAt
+    // totalPausedSeconds
+    // pauseCount
     // submittedAt
     // reviewedAt
     //

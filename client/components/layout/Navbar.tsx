@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/context/AuthContext";
+import NotificationDropdown from "@/components/layout/NotificationDropdown";
 
 export default function Navbar() {
   const router = useRouter();
@@ -12,7 +14,10 @@ export default function Navbar() {
   const [profileOpen, setProfileOpen] = useState(false);
 
   const handleLogout = async () => {
+    setProfileOpen(false);
+
     await logout();
+
     router.replace("/login");
   };
 
@@ -28,9 +33,8 @@ export default function Navbar() {
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#111318]/95 backdrop-blur-md">
       <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-6 lg:px-10">
         {/* Logo */}
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard")}
+        <Link
+          href="/dashboard"
           className="flex cursor-pointer items-center gap-3"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500 text-sm font-bold text-white">
@@ -40,41 +44,37 @@ export default function Navbar() {
           <span className="text-xl font-semibold tracking-tight text-white">
             EvalForge
           </span>
-        </button>
+        </Link>
 
         {/* Navigation */}
         <nav className="hidden items-center gap-8 md:flex">
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
+          <Link
+            href="/dashboard"
             className="cursor-pointer text-sm font-medium text-white transition hover:text-indigo-300"
           >
             Home
-          </button>
+          </Link>
 
-          <button
-            type="button"
-            onClick={() => router.push("/marketplace")}
+          <Link
+            href="/marketplace"
             className="cursor-pointer text-sm font-medium text-gray-400 transition hover:text-white"
           >
             Marketplace
-          </button>
+          </Link>
 
-          <button
-            type="button"
-            onClick={() => router.push("/earnings")}
+          <Link
+            href="/earnings"
             className="cursor-pointer text-sm font-medium text-gray-400 transition hover:text-white"
           >
             Earnings
-          </button>
+          </Link>
 
-          <button
-            type="button"
-            onClick={() => router.push("/qualifications")}
+          <Link
+            href="/quality"
             className="cursor-pointer text-sm font-medium text-gray-400 transition hover:text-white"
           >
             Quality
-          </button>
+          </Link>
         </nav>
 
         {/* Right Actions */}
@@ -94,9 +94,11 @@ export default function Navbar() {
               <circle cx="5" cy="5" r="2" />
               <circle cx="12" cy="5" r="2" />
               <circle cx="19" cy="5" r="2" />
+
               <circle cx="5" cy="12" r="2" />
               <circle cx="12" cy="12" r="2" />
               <circle cx="19" cy="12" r="2" />
+
               <circle cx="5" cy="19" r="2" />
               <circle cx="12" cy="19" r="2" />
               <circle cx="19" cy="19" r="2" />
@@ -104,34 +106,7 @@ export default function Navbar() {
           </button>
 
           {/* Notifications */}
-          <button
-            type="button"
-            aria-label="Notifications"
-            onClick={() => router.push("/notifications")}
-            className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-gray-400 transition hover:bg-white/10 hover:text-white"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <path
-                d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              <path
-                d="M10 21h4"
-                strokeLinecap="round"
-              />
-            </svg>
-
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-indigo-400" />
-          </button>
+          <NotificationDropdown />
 
           {/* Profile */}
           <div className="relative">
@@ -148,7 +123,8 @@ export default function Navbar() {
             </button>
 
             {profileOpen && (
-              <div className="absolute right-0 mt-3 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#1b1e24] shadow-2xl">
+              <div className="absolute right-0 top-12 z-[100] w-56 overflow-hidden rounded-xl border border-white/10 bg-[#1b1e24] shadow-2xl">
+                {/* User Info */}
                 <div className="border-b border-white/10 px-4 py-4">
                   <p className="truncate text-sm font-semibold text-white">
                     {user?.name || "User"}
@@ -163,28 +139,23 @@ export default function Navbar() {
                   </span>
                 </div>
 
+                {/* Profile Menu */}
                 <div className="p-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileOpen(false);
-                      router.push("/profile");
-                    }}
-                    className="w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
+                  <Link
+                    href="/profile"
+                    onClick={() => setProfileOpen(false)}
+                    className="block w-full cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
                   >
                     Profile
-                  </button>
+                  </Link>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileOpen(false);
-                      router.push("/setting");
-                    }}
-                    className="w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
+                  <Link
+                    href="/setting"
+                    onClick={() => setProfileOpen(false)}
+                    className="block w-full cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
                   >
                     Setting
-                  </button>
+                  </Link>
 
                   <button
                     type="button"

@@ -2,7 +2,6 @@
 
 import { useParams, useRouter } from "next/navigation";
 
-import Navbar from "@/components/layout/Navbar";
 
 interface Project {
   title: string;
@@ -104,7 +103,6 @@ export default function QualificationPage() {
   if (!project) {
     return (
       <div className="min-h-screen bg-[#111318] text-white">
-        <Navbar />
 
         <main className="mx-auto flex min-h-[70vh] max-w-[1440px] items-center justify-center px-6">
           <div className="text-center">
@@ -136,7 +134,6 @@ export default function QualificationPage() {
 
   return (
     <div className="min-h-screen bg-[#111318] text-white">
-      <Navbar />
 
       <main className="mx-auto max-w-[1400px] px-6 py-8 lg:px-10">
         {/* Back */}

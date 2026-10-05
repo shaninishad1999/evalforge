@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import Navbar from "@/components/layout/Navbar";
 import ProjectCard from "@/components/marketplace/ProjectCard";
 import MarketplaceFilters from "@/components/marketplace/MarketplaceFilters";
 
@@ -172,7 +171,6 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen bg-[#111318] text-white">
-      <Navbar />
 
       <main className="mx-auto max-w-[1440px] px-6 py-8 lg:px-10">
         {/* Marketplace Heading */}

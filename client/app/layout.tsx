@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
-import Footer from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
   title: "EvalForge",
@@ -19,7 +18,6 @@ export default function RootLayout({
         <AuthProvider>
           {children}
         </AuthProvider>
-           <Footer />
       </body>
     </html>
   );

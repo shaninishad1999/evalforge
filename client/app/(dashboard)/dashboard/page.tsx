@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/context/AuthContext";
-import Navbar from "@/components/layout/Navbar";
 
 import WelcomeHero from "@/components/dashboard/WelcomeHero";
 import ProjectQueue from "@/components/dashboard/ProjectQueue";
@@ -43,7 +42,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#111318] text-white">
-      <Navbar />
+      
 
       <main className="mx-auto max-w-[1440px] px-6 py-8 lg:px-10">
         {/* -------------------------------------------------- */}
